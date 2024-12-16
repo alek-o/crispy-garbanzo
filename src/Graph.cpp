@@ -10,6 +10,8 @@
 #include <set>
 #include <unordered_set>
 #include <random>
+#include <limits>
+#include <random>
 
 
 using json = nlohmann::json;
@@ -826,3 +828,253 @@ void Graph::backtrackingRecursiveExploration(int currentNode, std::vector<int> c
         }
     }
 }
+
+//------------------------------------------------------------------------------------------------
+
+std::vector<std::vector<int>> Graph::antColonyBTSP(
+    // int num_ants, 
+    // int num_iterations, 
+    // double alpha, 
+    // double beta, 
+    // double evaporation_rate, 
+    std::vector<std::pair<int, int>> mandatoryEdges) 
+{
+    int num_ants = 10;
+    int num_iterations = 100;
+    double alpha = 1.0;
+    double beta = 5.0;
+    double evaporation_rate = 0.1;
+
+    std::vector<std::vector<int>> result;
+
+    std::mt19937 gen(std::random_device{}());
+    std::uniform_int_distribution<> node_dis(0, static_cast<int>(nodeCount) - 1);
+
+    std::vector<std::vector<double>> pheromones(nodeCount, std::vector<double>(nodeCount, 1.0));
+    std::vector<int> best_cycle;
+    double best_bottleneck = std::numeric_limits<double>::max();
+
+    for (int iteration = 0; iteration < num_iterations; ++iteration) {
+        std::vector<std::vector<int>> ant_cycles(num_ants);
+        std::vector<double> ant_bottlenecks(num_ants, std::numeric_limits<double>::max());
+
+        for (int ant = 0; ant < num_ants; ++ant) {
+            std::vector<bool> visited(nodeCount, false);
+            std::vector<int> cycle;
+
+            // Start from a random node
+            int current = node_dis(gen);
+            visited[current] = true;
+            cycle.push_back(current);
+
+            while (cycle.size() < nodeCount) {
+                std::vector<double> probabilities(nodeCount, 0.0);
+                double sum = 0.0;
+
+                // Calculate probabilities for all unvisited neighbors
+                for (int neighbor : getAdjacentNodes(current)) {
+                    if (!visited[neighbor]) {
+                        double pheromone = std::pow(pheromones[current][neighbor], alpha);
+                        double heuristic = std::pow(1.0 / getWeight(current, neighbor), beta);
+                        probabilities[neighbor] = pheromone * heuristic;
+                        sum += probabilities[neighbor];
+                    }
+                }
+
+                if (sum > 0) {
+                    // Normalize probabilities
+                    for (double &prob : probabilities) {
+                        prob /= sum;
+                    }
+
+                    // Select next node based on probabilities
+                    std::discrete_distribution<> dist(probabilities.begin(), probabilities.end());
+                    current = dist(gen);
+                    visited[current] = true;
+                    cycle.push_back(current);
+                } else {
+                    // No valid move; restart cycle for this ant
+                    cycle.clear();
+                    break;
+                }
+            }
+
+            // Validate and update the cycle
+            if (!cycle.empty() && isCycleBackToStart(cycle) && hasAllMandatoryEdges(cycle, mandatoryEdges)) {
+                double bottleneck = 0.0;
+                for (size_t i = 0; i < cycle.size(); ++i) {
+                    int u = cycle[i];
+                    int v = cycle[(i + 1) % cycle.size()];
+                    bottleneck = std::max(bottleneck, static_cast<double>(getWeight(u, v)));
+                }
+
+                ant_cycles[ant] = cycle;
+                ant_bottlenecks[ant] = bottleneck;
+
+                // Update best cycle
+                if (bottleneck < best_bottleneck) {
+                    best_bottleneck = bottleneck;
+                    best_cycle = cycle;
+                    result.clear();
+                    result.push_back(best_cycle);
+                } else if (bottleneck == best_bottleneck) {
+                    result.push_back(cycle);
+                }
+            }
+        }
+
+        // Pheromone evaporation
+        for (auto &row : pheromones) {
+            for (auto &pheromone : row) {
+                pheromone *= (1.0 - evaporation_rate);
+            }
+        }
+
+        // Pheromone deposition
+        for (int ant = 0; ant < num_ants; ++ant) {
+            if (!ant_cycles[ant].empty()) {
+                double contribution = 1.0 / ant_bottlenecks[ant];
+                for (size_t i = 0; i < ant_cycles[ant].size(); ++i) {
+                    int u = ant_cycles[ant][i];
+                    int v = ant_cycles[ant][(i + 1) % ant_cycles[ant].size()];
+                    pheromones[u][v] += contribution;
+                    pheromones[v][u] += contribution; // Undirected graph
+                }
+            }
+        }
+    }
+
+    return result;
+}
+
+
+// std::vector<std::vector<int>> Graph::antColonyBTSP(int num_ants, int num_iterations, double alpha, double beta, double evaporation_rate, std::vector<std::pair<int,int>> mandatoryEdges)
+// {
+//     std::vector<std::vector<int>> result;
+
+//     int min = 0;
+//     size_t* max = &nodeCount;
+//     std::random_device rd;
+//     std::mt19937 gen(rd());
+
+//     std::vector<std::vector<double>> pheromones(nodeCount, std::vector<double>(nodeCount, 1.0));
+//     std::vector<int> best_cycle;
+//     double best_bottleneck = std::numeric_limits<double>::max();
+
+//     for (int i = 0; i < num_iterations; i++)
+//     {
+//         std::vector<std::vector<int>> ant_cycles(num_ants);
+//         std::vector<double> ant_bottlenecks(num_ants, std::numeric_limits<double>::max());
+        
+//         for (int ant = 0; ant < num_ants; ant++)
+//         {
+//             std::vector<bool> visited(nodeCount, false);
+//             std::vector<int> cycle;
+
+//             std::uniform_real_distribution<> dis(min, (int)max);
+//             int current = dis(gen);
+
+//             visited[current] = true;
+//             cycle.push_back(current);
+
+//             while (cycle.size() < nodeCount)
+//             {
+//                 std::vector<double> probabilities;
+
+//                 double sum = 0.0;
+
+//                 for (int node : getAdjacentNodes(current))
+//                 { 
+//                     if (!visited[node])
+//                     {
+//                         double pheromone = pow(pheromones[current][node], alpha);
+//                         double heuristic = pow(1.0 / getWeight(current, node), beta);
+//                         probabilities.push_back(pheromone * heuristic);
+//                         sum += pheromone * heuristic;
+//                     }
+//                     else
+//                     {
+//                         probabilities.push_back(0.0);
+//                     }
+//                 }
+
+//                 if (sum > 0)
+//                 {
+//                     for (auto &p : probabilities) p /= sum;
+//                     std::uniform_real_distribution<> dis(min, (int)max);
+//                     double r = dis(gen);
+//                     double cumulative = 0.0;
+//                     for (size_t i = 0; i < probabilities.size(); i++)
+//                     {
+//                         cumulative += probabilities[i];
+//                         if (r <= cumulative)
+//                         {
+//                             current = i;
+//                             break;
+//                         }
+//                     }
+//                 }
+//                     visited[current] = true;
+//                 cycle.push_back(current);
+//             }
+
+//             if (isCycleBackToStart(cycle) && hasAllMandatoryEdges(cycle, mandatoryEdges))
+//             {
+//                 double bottleneck = 0.0;
+//                 for (int i = 0; i < cycle.size(); i++)
+//                 {
+//                     int u = cycle[i];
+//                     int v = cycle[(i + 1) % cycle.size()];
+//                     for (const auto& node : getAdjacentNodes(u))
+//                     {
+//                         if (node == v)
+//                         {
+//                             bottleneck = std::max(bottleneck, (double)getWeight(u, v));
+//                             break;
+//                         }
+//                     }
+//                 }
+
+//                 if (bottleneck < best_bottleneck)
+//                 {
+//                     best_bottleneck = bottleneck;
+//                     best_cycle = cycle;
+//                     result.clear();
+//                     result.push_back(best_cycle);
+                    
+//                 }
+//                 else if (bottleneck == best_bottleneck)
+//                 {
+//                     result.push_back(cycle);
+//                 }
+
+//                 ant_bottlenecks[ant] = bottleneck;
+//             }
+//         }
+
+//         for (int i = 0; i < nodeCount; i++)
+//         {
+//             for (int j = 0; j < nodeCount; j++)
+//             {
+//                 pheromones[i][j] *= (1.0 - evaporation_rate);
+//             }
+//         }
+
+//         for (int ant = 0; ant < num_ants; ant++)\
+//         {
+//             if (ant_bottlenecks[ant] < std::numeric_limits<double>::max())
+//             {
+//                 double contribution = 1.0 / ant_bottlenecks[ant];
+//                 for (int i = 0; i < ant_cycles[ant].size(); i++) 
+//                 {
+//                     int u = ant_cycles[ant][i];
+//                     int v = ant_cycles[ant][(i + 1) % ant_cycles[ant].size()];
+//                     pheromones[u][v] += contribution;
+//                     pheromones[v][u] += contribution;
+//                 }
+//             }
+//         }
+//     }
+
+//     return result;
+// }

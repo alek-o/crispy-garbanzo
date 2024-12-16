@@ -49,7 +49,7 @@ public:
     std::vector<std::vector<int>> backtrackingBTSP(std::vector<std::pair<int,int>> mandatoryEdges = {});
     void backtrackingRecursiveExploration(int currentNode, std::vector<int> currentPath, std::vector<bool> visited, int maxCurrentPathWeight, std::vector<std::vector<int>>& results, const std::vector<std::pair<int,int>>& mandatoryEdges = {});
     std::vector<std::vector<int>> greedyBTSP(std::vector<std::pair<int,int>> mandatoryEdges = {});
-
+    std::vector<std::vector<int>> antColonyBTSP(std::vector<std::pair<int,int>> mandatoryEdges = {});
     void saveToFile(std::string fileName) const;
     void loadFromFile(std::string fileName);
 
